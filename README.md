@@ -19,7 +19,8 @@ The goal is to build a system that:
 
 ## 🛠 Tech Stack
 
-- **Language:** Python  
+- **Language:** Python
+- **LLM:** Gemini Pro (via Google Generative AI API)
 - **Libraries:** 
   - `reportlab` – PDF generation and styling  
   - `json` – Test data parsing  
@@ -111,6 +112,7 @@ The generated PDF report (`feedback3_report.pdf`) includes the following structu
 📄 **Download Report:** [https://drive.google.com/file/d/1MpGxVjs0D6h1p3m_GH8PWgbN62mVCpgJ/view?usp=drive_link]  
 📌 File Name: `feedback3_report.pdf`  
 ✅ Includes:
+- Motivating Intro message
 - Subject & difficulty tables  
 - Accuracy vs. time insights  
 - Concept breakdown  
