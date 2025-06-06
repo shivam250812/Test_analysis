@@ -1,0 +1,144 @@
+import re
+from collections import defaultdict
+
+def parse_llm_context(llm_context):
+    """
+    Parse the llm_context string into a structured performance data dictionary.
+    """
+    performance_data = {
+        "overall_summary": {},
+        "subject_summary": defaultdict(dict),
+        "difficulty_summary": defaultdict(dict),
+        "chapter_concepts": defaultdict(lambda: defaultdict(dict))
+    }
+
+    # Helper function to clean percentage values
+    def clean_percent(value):
+        return value.strip('%') if isinstance(value, str) else value
+
+    # Helper function to parse fraction strings (e.g., "47/75")
+    def parse_fraction(fraction):
+        if isinstance(fraction, str):
+            num, denom = fraction.split('/')
+            return int(num), int(denom)
+        return fraction, 1
+
+    # Parse Overall Test Summary
+    overall_match = re.search(
+        r"## Overall Test Summary\n"
+        r"- \*\*Total Score\*\*: (\d+/\d+) marks\n"
+        r"- \*\*Questions Attempted\*\*: (\d+/\d+)\n"
+        r"- \*\*Correct Answers\*\*: (\d+)\n"
+        r"- \*\*Overall Accuracy\*\*: ([\d.]+)%\n"
+        r"- \*\*Time Taken\*\*: ([\d.]+) minutes",
+        llm_context
+    )
+    if overall_match:
+        performance_data["overall_summary"] = {
+            "total_score": overall_match.group(1),
+            "questions_attempted": overall_match.group(2),
+            "correct_answers": int(overall_match.group(3)),
+            "overall_accuracy": f"{float(overall_match.group(4))}%",
+            "time_taken": f"{float(overall_match.group(5))} minutes"
+        }
+
+    # Parse Subject-wise Performance
+    subject_matches = re.finditer(
+        r"### (Physics|Chemistry|Mathematics)\n"
+        r"- Score: (\d+/\d+) marks\n"
+        r"- Questions: (\d+/\d+) attempted\n"
+        r"- Correct: (\d+) \| Incorrect: (\d+)\n"
+        r"- Accuracy: ([\d.]+)%\n"
+        r"- Avg Time/Question: ([\d.]+) seconds",
+        llm_context
+    )
+    for match in subject_matches:
+        subject = match.group(1)
+        performance_data["subject_summary"][subject] = {
+            "score": match.group(2),
+            "questions_attempted": match.group(3),
+            "correct": int(match.group(4)),
+            "incorrect": int(match.group(5)),
+            "accuracy": f"{float(match.group(6))}%",
+            "avg_time_per_question": f"{float(match.group(7))} seconds"
+        }
+
+    # Parse Overall Difficulty-wise Analysis
+    difficulty_matches = re.finditer(
+        r"### (Easy|Medium|Tough) Level Questions\n"
+        r"- Total Questions: (\d+)\n"
+        r"- Attempted: (\d+) \| Correct: (\d+) \| Incorrect: (\d+)\n"
+        r"- Not Attempted: \d+ \| Marked for Review: \d+\n"
+        r"- Accuracy: ([\d.]+)%\n"
+        r"- Average Time per Attempted Question: ([\d.]+) seconds",
+        llm_context
+    )
+    for match in difficulty_matches:
+        difficulty = match.group(1)
+        performance_data["difficulty_summary"][difficulty] = {
+            "total": int(match.group(2)),
+            "attempted": int(match.group(3)),
+            "correct": int(match.group(4)),
+            "incorrect": int(match.group(5)),
+            "accuracy": f"{float(match.group(6))}%",
+            "avg_time": f"{float(match.group(7))} seconds"
+        }
+
+    # Parse Chapter-wise Analysis with Concepts
+    chapter_matches = re.finditer(
+        r"\*\*(Electrostatics|Capacitance|Solutions|Electrochemistry|Functions|Sets and Relations)\*\*\n"
+        r"- Total Questions: (\d+)\n"
+        r"- Attempted: (\d+) \| Not Attempted: \d+ \| Marked for Review: \d+\n"
+        r"- Performance: (\d+) correct, (\d+) incorrect\n"
+        r"- Accuracy: ([\d.]+)%\n"
+        r"- Avg Time/Answered: ([\d.]+) seconds\n"
+        r"- Difficulty Distribution: Easy\((\d+)\), Medium\((\d+)\), Tough\((\d+)\)\n\n"
+        r"(?:\*\*Strong Concepts \(≥80% accuracy\):\*\*\n((?:  - .*\n)*))?"
+        r"(?:\*\*Moderate Concepts \(60-80% accuracy\):\*\*\n((?:  - .*\n)*))?"
+        r"(?:\*\*Weak Concepts \(≤60% accuracy\):\*\*\n((?:  - .*\n)*))?",
+        llm_context
+    )
+    for match in chapter_matches:
+        chapter = match.group(1)
+        subject = (
+            "Physics" if chapter in ["Electrostatics", "Capacitance"] else
+            "Chemistry" if chapter in ["Solutions", "Electrochemistry"] else
+            "Mathematics"
+        )
+        performance_data["chapter_concepts"][subject][chapter] = {
+            "total_questions": int(match.group(2)),
+            "attempted": int(match.group(3)),
+            "correct": int(match.group(4)),
+            "incorrect": int(match.group(5)),
+            "accuracy": f"{float(match.group(6))}%",
+            "avg_time": f"{float(match.group(7))} seconds",
+            "difficulty_distribution": {
+                "easy": int(match.group(8)),
+                "medium": int(match.group(9)),
+                "tough": int(match.group(10))
+            },
+            "strong_concepts": [],
+            "weak_concepts": []
+        }
+
+        # Parse strong concepts
+        strong_concepts = match.group(11) or ""
+        for concept_line in strong_concepts.split('\n'):
+            concept_match = re.match(r"  - (.*?): \d+/\d+ \(([\d.]+)%\)", concept_line.strip())
+            if concept_match:
+                performance_data["chapter_concepts"][subject][chapter]["strong_concepts"].append({
+                    "concept": concept_match.group(1),
+                    "accuracy": f"{float(concept_match.group(2))}%"
+                })
+
+        # Parse weak concepts
+        weak_concepts = match.group(13) or ""
+        for concept_line in weak_concepts.split('\n'):
+            concept_match = re.match(r"  - (.*?): \d+/\d+ \(([\d.]+)%\)", concept_line.strip())
+            if concept_match:
+                performance_data["chapter_concepts"][subject][chapter]["weak_concepts"].append({
+                    "concept": concept_match.group(1),
+                    "accuracy": f"{float(concept_match.group(2))}%"
+                })
+
+    return performance_data
